@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -36,7 +36,7 @@ import compiler.vectorapi.reshape.utils.VectorReshapeHelper;
  * @summary Test that vector cast intrinsics work as intended on avx2.
  * @requires vm.cpu.features ~= ".*avx2.*"
  * @library /test/lib /
- * @run driver compiler.vectorapi.reshape.TestVectorCastAVX2
+ * @run main/timeout=300 compiler.vectorapi.reshape.TestVectorCastAVX2
  */
 public class TestVectorCastAVX2 {
     public static void main(String[] args) {

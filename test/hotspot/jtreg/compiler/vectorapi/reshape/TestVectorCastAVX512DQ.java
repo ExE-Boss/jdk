@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2023, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -36,7 +36,7 @@ import compiler.vectorapi.reshape.utils.VectorReshapeHelper;
  * @summary Test that vector cast intrinsics work as intended on avx512dq.
  * @requires vm.cpu.features ~= ".*avx512dq.*"
  * @library /test/lib /
- * @run driver compiler.vectorapi.reshape.TestVectorCastAVX512DQ
+ * @run main/timeout=300 compiler.vectorapi.reshape.TestVectorCastAVX512DQ
  */
 public class TestVectorCastAVX512DQ {
     public static void main(String[] args) {

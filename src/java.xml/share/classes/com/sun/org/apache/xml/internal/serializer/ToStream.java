@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2006, 2025, Oracle and/or its affiliates. All rights reserved.
  */
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
@@ -55,7 +55,7 @@ import org.xml.sax.SAXException;
  * serializers (xml, html, text ...) that write output to a stream.
  *
  * @xsl.usage internal
- * @LastModified: Mar 2022
+ * @LastModified: Feb 2025
  */
 abstract public class ToStream extends SerializerBase {
 
@@ -896,16 +896,8 @@ abstract public class ToStream extends SerializerBase {
 
             m_writer.write("<!ENTITY ");
             m_writer.write(name);
-            if (publicId != null) {
-                m_writer.write(" PUBLIC \"");
-                m_writer.write(publicId);
-
-            }
-            else {
-                m_writer.write(" SYSTEM \"");
-                m_writer.write(systemId);
-            }
-            m_writer.write("\" >");
+            m_writer.write(JdkXmlUtils.getDTDExternalDecl(publicId, systemId));
+            m_writer.write(">");
             m_writer.write(m_lineSep, 0, m_lineSepLen);
         } catch (IOException e) {
             // TODO Auto-generated catch block
@@ -963,7 +955,7 @@ abstract public class ToStream extends SerializerBase {
         throws IOException, SAXException
     {
         int status = -1;
-        if (i + 1 >= end)
+        if (i + 1 >= end && m_highSurrogate == 0)
         {
             m_highSurrogate = c;
             return status;
@@ -1974,43 +1966,16 @@ abstract public class ToStream extends SerializerBase {
             final Writer writer = m_writer;
             writer.write("<!DOCTYPE ");
             writer.write(name);
+            String systemId = getDoctypeSystem();
+            writer.write(JdkXmlUtils.getDTDExternalDecl(getDoctypePublic(), systemId));
 
-            String doctypePublic = getDoctypePublic();
-            if (null != doctypePublic)
+            if (null != systemId)
             {
-                writer.write(" PUBLIC \"");
-                writer.write(doctypePublic);
-                writer.write('\"');
-            }
-
-            String doctypeSystem = getDoctypeSystem();
-            if (null != doctypeSystem)
-            {
-                char quote = JdkXmlUtils.getQuoteChar(doctypeSystem);
-                if (null == doctypePublic) {
-                    writer.write(" SYSTEM");
-                }
-                writer.write(" ");
-                writer.write(quote);
-
-                writer.write(doctypeSystem);
-                writer.write(quote);
                 if (closeDecl)
                 {
                     writer.write(">");
                     writer.write(m_lineSep, 0, m_lineSepLen);
                     closeDecl = false; // done closing
-                }
-            }
-            boolean dothis = false;
-            if (dothis)
-            {
-                // at one point this code seemed right,
-                // but not anymore - Brian M.
-                if (closeDecl)
-                {
-                    writer.write('>');
-                    writer.write(m_lineSep, 0, m_lineSepLen);
                 }
             }
         }
@@ -3577,16 +3542,8 @@ abstract public class ToStream extends SerializerBase {
 
             m_writer.write("<!NOTATION ");
             m_writer.write(name);
-            if (pubID != null) {
-                m_writer.write(" PUBLIC \"");
-                m_writer.write(pubID);
-
-            }
-            else {
-                m_writer.write(" SYSTEM \"");
-                m_writer.write(sysID);
-            }
-            m_writer.write("\" >");
+            m_writer.write(JdkXmlUtils.getDTDExternalDecl(pubID, sysID));
+            m_writer.write(">");
             m_writer.write(m_lineSep, 0, m_lineSepLen);
         } catch (IOException e) {
             // TODO Auto-generated catch block
@@ -3607,16 +3564,8 @@ abstract public class ToStream extends SerializerBase {
 
             m_writer.write("<!ENTITY ");
             m_writer.write(name);
-            if (pubID != null) {
-                m_writer.write(" PUBLIC \"");
-                m_writer.write(pubID);
-
-            }
-            else {
-                m_writer.write(" SYSTEM \"");
-                m_writer.write(sysID);
-            }
-            m_writer.write("\" NDATA ");
+            m_writer.write(JdkXmlUtils.getDTDExternalDecl(pubID, sysID));
+            m_writer.write(" NDATA ");
             m_writer.write(notationName);
             m_writer.write(" >");
             m_writer.write(m_lineSep, 0, m_lineSepLen);

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2016, 2025, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -34,7 +34,7 @@
  *        jdk.test.lib.JDKToolLauncher
  *        jdk.test.lib.Platform
  *        jdk.test.lib.process.*
- * @run main ReadJar
+ * @run main/timeout=480 ReadJar
  */
 
 import java.nio.file.Files;
@@ -159,7 +159,7 @@ public class ReadJar {
                 .shouldContain("Certificate #1:")
                 .shouldContain("Certificate #2:")
                 .shouldContain("Signer #2:")
-                .shouldMatch("The certificate #.* of signer #.*" + "uses the SHA1withRSA.*will be disabled")
+                .shouldMatch("The certificate #.* of signer #.*" + "uses the SHA1withRSA.*considered a security risk")
                 .shouldMatch("The certificate #.* of signer #.*" + "uses a 512-bit RSA key.*is disabled")
                 .shouldHaveExitValue(0);
 

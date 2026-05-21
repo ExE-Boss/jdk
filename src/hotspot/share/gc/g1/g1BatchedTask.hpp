@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2021, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -28,8 +28,9 @@
 #include "gc/g1/g1GCPhaseTimes.hpp"
 #include "gc/shared/workerThread.hpp"
 #include "memory/allocation.hpp"
+#include "runtime/atomic.hpp"
 
-template <typename E, MEMFLAGS F>
+template <typename E, MemTag MT>
 class GrowableArrayCHeap;
 
 // G1AbstractSubTask represents a task to be performed either within a
@@ -68,7 +69,7 @@ public:
   // Called by G1BatchedTask to determine total number of workers.
   virtual double worker_cost() const = 0;
 
-  // Called by G1BatchedTask to provide information about the the maximum
+  // Called by G1BatchedTask to provide information about the maximum
   // number of workers for all subtasks after it has been determined.
   virtual void set_max_workers(uint max_workers) { }
 
@@ -120,7 +121,7 @@ public:
 // 5) ~T()
 //
 class G1BatchedTask : public WorkerTask {
-  volatile int _num_serial_tasks_done;
+  Atomic<int> _num_serial_tasks_done;
   G1GCPhaseTimes* _phase_times;
 
   bool try_claim_serial_task(int& task);

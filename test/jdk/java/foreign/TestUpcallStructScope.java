@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2025, Oracle and/or its affiliates. All rights reserved.
  *  DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  *  This code is free software; you can redistribute it and/or modify it
@@ -24,68 +24,67 @@
 
 /*
  * @test
- * @requires ((os.arch == "amd64" | os.arch == "x86_64") & sun.arch.data.model == "64") | os.arch == "aarch64"
- * @modules jdk.incubator.foreign/jdk.internal.foreign
  *
  * @run testng/othervm/native
  *   --enable-native-access=ALL-UNNAMED
- *   -Djdk.internal.foreign.ProgrammableInvoker.USE_SPEC=false
+ *   -Djdk.internal.foreign.DowncallLinker.USE_SPEC=false
  *   TestUpcallStructScope
  * @run testng/othervm/native
  *   --enable-native-access=ALL-UNNAMED
- *   -Djdk.internal.foreign.ProgrammableInvoker.USE_SPEC=true
+ *   -Djdk.internal.foreign.DowncallLinker.USE_SPEC=true
  *   TestUpcallStructScope
  */
 
-import jdk.incubator.foreign.Addressable;
-import jdk.incubator.foreign.CLinker;
-import jdk.incubator.foreign.FunctionDescriptor;
-import jdk.incubator.foreign.NativeSymbol;
-import jdk.incubator.foreign.SymbolLookup;
-import jdk.incubator.foreign.MemoryAddress;
-import jdk.incubator.foreign.MemoryLayout;
-import jdk.incubator.foreign.MemorySegment;
-import jdk.incubator.foreign.ResourceScope;
+import java.lang.foreign.*;
+
 import org.testng.annotations.Test;
 
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertTrue;
+import static org.testng.Assert.assertEquals;
 
 public class TestUpcallStructScope extends NativeTestHelper {
     static final MethodHandle MH_do_upcall;
-    static final CLinker LINKER = CLinker.systemCLinker();
+    static final MethodHandle MH_do_upcall_ptr;
     static final MethodHandle MH_Consumer_accept;
-
-    // struct S_PDI { void* p0; double p1; int p2; };
-    static final MemoryLayout S_PDI_LAYOUT = MemoryLayout.structLayout(
-        C_POINTER.withName("p0"),
-        C_DOUBLE.withName("p1"),
-        C_INT.withName("p2")
-    );
+    static final MethodHandle MH_BiConsumer_accept;
 
     static {
         System.loadLibrary("TestUpcallStructScope");
-        SymbolLookup lookup = SymbolLookup.loaderLookup();
         MH_do_upcall = LINKER.downcallHandle(
-            lookup.lookup("do_upcall").get(),
+                findNativeOrThrow("do_upcall"),
                 FunctionDescriptor.ofVoid(C_POINTER, S_PDI_LAYOUT)
+        );
+        MH_do_upcall_ptr = LINKER.downcallHandle(
+                findNativeOrThrow("do_upcall_ptr"),
+                FunctionDescriptor.ofVoid(C_POINTER, S_PDI_LAYOUT, C_POINTER)
         );
 
         try {
             MH_Consumer_accept = MethodHandles.publicLookup().findVirtual(Consumer.class, "accept",
                     MethodType.methodType(void.class, Object.class));
+            MH_BiConsumer_accept = MethodHandles.publicLookup().findVirtual(BiConsumer.class, "accept",
+                    MethodType.methodType(void.class, Object.class, Object.class));
         } catch (NoSuchMethodException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
     }
 
-    private static MethodHandle methodHandle (Consumer<MemorySegment> callback) {
-        return MH_Consumer_accept.bindTo(callback).asType(MethodType.methodType(void.class, MemorySegment.class));
+    private static MethodHandle methodHandle(Consumer<MemorySegment> callback) {
+        return MH_Consumer_accept.bindTo(callback)
+                .asType(MethodType.methodType(void.class, MemorySegment.class));
+    }
+
+    private static MethodHandle methodHandle(BiConsumer<MemorySegment, MemorySegment> callback) {
+        return MH_BiConsumer_accept.bindTo(callback)
+                .asType(MethodType.methodType(void.class, MemorySegment.class, MemorySegment.class));
     }
 
     @Test
@@ -93,9 +92,9 @@ public class TestUpcallStructScope extends NativeTestHelper {
         AtomicReference<MemorySegment> capturedSegment = new AtomicReference<>();
         MethodHandle target = methodHandle(capturedSegment::set);
         FunctionDescriptor upcallDesc = FunctionDescriptor.ofVoid(S_PDI_LAYOUT);
-        try (ResourceScope scope = ResourceScope.newConfinedScope()) {
-            NativeSymbol upcallStub = LINKER.upcallStub(target, upcallDesc, scope);
-            MemorySegment argSegment = MemorySegment.allocateNative(S_PDI_LAYOUT, scope);
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment upcallStub = LINKER.upcallStub(target, upcallDesc, arena);
+            MemorySegment argSegment = arena.allocate(S_PDI_LAYOUT);
             MH_do_upcall.invoke(upcallStub, argSegment);
         }
 
@@ -103,4 +102,22 @@ public class TestUpcallStructScope extends NativeTestHelper {
         assertFalse(captured.scope().isAlive());
     }
 
+    @Test
+    public void testOtherPointer() throws Throwable {
+        AtomicReference<MemorySegment> capturedSegment = new AtomicReference<>();
+        MethodHandle target = methodHandle((_, addr) -> capturedSegment.set(addr));
+        FunctionDescriptor upcallDesc = FunctionDescriptor.ofVoid(S_PDI_LAYOUT, C_POINTER);
+        MemorySegment argAddr = MemorySegment.ofAddress(42);
+        try (Arena arena = Arena.ofConfined()) {
+            MemorySegment upcallStub = LINKER.upcallStub(target, upcallDesc, arena);
+            MemorySegment argSegment = arena.allocate(S_PDI_LAYOUT);
+            MH_do_upcall_ptr.invoke(upcallStub, argSegment, argAddr);
+        }
+
+        // We've captured the address '42' from the upcall. This should have
+        // the global scope, so it should still be alive here.
+        MemorySegment captured = capturedSegment.get();
+        assertEquals(argAddr, captured);
+        assertTrue(captured.scope().isAlive());
+    }
 }

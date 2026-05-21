@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2022, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -23,28 +23,37 @@
 
 /**
  * @test
- * @bug 8080535 8191410 8215194 8221431 8239383 8268081 8283465
+ * @bug 8080535 8191410 8215194 8221431 8239383 8268081 8283465 8284856
  * @summary Check if the NUM_ENTITIES field reflects the correct number
- *      of Character.UnicodeBlock constants.
+ *      of Character.UnicodeBlock constants. Also checks the size of
+ *      Character.UnicodeScript's "aliases" map.
  * @modules java.base/java.lang:open
- * @run testng NumberEntities
+ * @run junit NumberEntities
  */
-
-import static org.testng.Assert.assertEquals;
-import org.testng.annotations.Test;
 
 import java.lang.reflect.Field;
 import java.util.Map;
 
-@Test
+import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 public class NumberEntities {
-    public void test_NumberEntities() throws Throwable {
+    @Test
+    public void test_UnicodeBlock_NumberEntities() throws Throwable {
         // The number of entries in Character.UnicodeBlock.map.
         // See src/java.base/share/classes/java/lang/Character.java
         Field n = Character.UnicodeBlock.class.getDeclaredField("NUM_ENTITIES");
         Field m = Character.UnicodeBlock.class.getDeclaredField("map");
         n.setAccessible(true);
         m.setAccessible(true);
-        assertEquals(((Map)m.get(null)).size(), n.getInt(null));
+        assertEquals(n.getInt(null), ((Map)m.get(null)).size());
+    }
+    @Test
+    public void test_UnicodeScript_aliases() throws Throwable {
+        // The number of entries in Character.UnicodeScript.aliases.
+        // See src/java.base/share/classes/java/lang/Character.java
+        Field aliases = Character.UnicodeScript.class.getDeclaredField("aliases");
+        aliases.setAccessible(true);
+        assertEquals(Character.UnicodeScript.UNKNOWN.ordinal() + 1, ((Map)aliases.get(null)).size());
     }
 }

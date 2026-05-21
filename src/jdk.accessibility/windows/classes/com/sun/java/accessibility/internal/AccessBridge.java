@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2005, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2005, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -25,30 +25,101 @@
 
 package com.sun.java.accessibility.internal;
 
-import java.awt.*;
-import java.awt.event.*;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.EventQueue;
+import java.awt.Font;
+import java.awt.FontMetrics;
+import java.awt.GraphicsConfiguration;
+import java.awt.GraphicsDevice;
+import java.awt.GraphicsEnvironment;
+import java.awt.IllegalComponentStateException;
+import java.awt.KeyboardFocusManager;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.Toolkit;
+import java.awt.event.ActionEvent;
+import java.awt.event.FocusEvent;
+import java.awt.event.FocusListener;
+import java.awt.event.InvocationEvent;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.event.WindowEvent;
+import java.awt.event.WindowListener;
 import java.awt.geom.AffineTransform;
-import java.util.*;
-import java.lang.*;
-import java.lang.reflect.*;
 
-import java.beans.*;
-import javax.swing.*;
-import javax.swing.event.*;
-import javax.swing.text.*;
-import javax.swing.tree.*;
-import javax.swing.table.*;
-import javax.swing.plaf.TreeUI;
-
-import javax.accessibility.*;
-import com.sun.java.accessibility.util.*;
-import java.awt.geom.Rectangle2D;
-import sun.awt.AWTAccessor;
-import sun.awt.AppContext;
-import sun.awt.SunToolkit;
-
+import java.beans.PropertyChangeEvent;
+import java.beans.PropertyChangeListener;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Locale;
+import java.util.Map;
+import java.util.StringTokenizer;
+import java.util.Vector;
+import java.util.WeakHashMap;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+
+import javax.accessibility.Accessible;
+import javax.accessibility.AccessibleAction;
+import javax.accessibility.AccessibleComponent;
+import javax.accessibility.AccessibleContext;
+import javax.accessibility.AccessibleEditableText;
+import javax.accessibility.AccessibleExtendedComponent;
+import javax.accessibility.AccessibleExtendedTable;
+import javax.accessibility.AccessibleHyperlink;
+import javax.accessibility.AccessibleHypertext;
+import javax.accessibility.AccessibleIcon;
+import javax.accessibility.AccessibleKeyBinding;
+import javax.accessibility.AccessibleRelation;
+import javax.accessibility.AccessibleRelationSet;
+import javax.accessibility.AccessibleRole;
+import javax.accessibility.AccessibleSelection;
+import javax.accessibility.AccessibleState;
+import javax.accessibility.AccessibleStateSet;
+import javax.accessibility.AccessibleTable;
+import javax.accessibility.AccessibleText;
+import javax.accessibility.AccessibleValue;
+
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
+import javax.swing.JMenuItem;
+import javax.swing.JPopupMenu;
+import javax.swing.JRootPane;
+import javax.swing.JTable;
+import javax.swing.JTree;
+import javax.swing.KeyStroke;
+import javax.swing.MenuElement;
+import javax.swing.MenuSelectionManager;
+import javax.swing.event.CaretEvent;
+import javax.swing.event.CaretListener;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
+import javax.swing.event.MenuEvent;
+import javax.swing.event.MenuListener;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
+import javax.swing.plaf.TreeUI;
+import javax.swing.table.TableCellRenderer;
+import javax.swing.text.AttributeSet;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.JTextComponent;
+import javax.swing.text.StyleConstants;
+import javax.swing.text.TabSet;
+import javax.swing.tree.TreeCellRenderer;
+import javax.swing.tree.TreeModel;
+import javax.swing.tree.TreePath;
+
+import com.sun.java.accessibility.util.AWTEventMonitor;
+import com.sun.java.accessibility.util.AccessibilityEventMonitor;
+import com.sun.java.accessibility.util.EventQueueMonitor;
+import com.sun.java.accessibility.util.SwingEventMonitor;
+import com.sun.java.accessibility.util.Translator;
 
 /*
  * Note: This class has to be public.  It's loaded from the VM like this:
@@ -86,44 +157,23 @@ public final class AccessBridge {
         initStatic();
     }
 
-    @SuppressWarnings("removal")
+    @SuppressWarnings("restricted")
     private static void initStatic() {
         // Load the appropriate DLLs
         boolean is32on64 = false;
         if (System.getProperty("os.arch").equals("x86")) {
             // 32 bit JRE
             // Load jabsysinfo.dll so can determine Win bitness
-            java.security.AccessController.doPrivileged(
-                new java.security.PrivilegedAction<Void>() {
-                    public Void run() {
-                        System.loadLibrary("jabsysinfo");
-                        return null;
-                    }
-                }, null, new java.lang.RuntimePermission("loadLibrary.jabsysinfo")
-            );
+            System.loadLibrary("jabsysinfo");
             if (isSysWow()) {
                 // 32 bit JRE on 64 bit OS
                 is32on64 = true;
-                java.security.AccessController.doPrivileged(
-                    new java.security.PrivilegedAction<Void>() {
-                        public Void run() {
-                            System.loadLibrary("javaaccessbridge-32");
-                            return null;
-                        }
-                    }, null, new java.lang.RuntimePermission("loadLibrary.javaaccessbridge-32")
-                );
+                System.loadLibrary("javaaccessbridge-32");
             }
         }
         if (!is32on64) {
             // 32 bit JRE on 32 bit OS or 64 bit JRE on 64 bit OS
-            java.security.AccessController.doPrivileged(
-                new java.security.PrivilegedAction<Void>() {
-                    public Void run() {
-                        System.loadLibrary("javaaccessbridge");
-                        return null;
-                    }
-                }, null, new java.lang.RuntimePermission("loadLibrary.javaaccessbridge")
-            );
+            System.loadLibrary("javaaccessbridge");
         }
     }
 
@@ -3851,6 +3901,8 @@ public final class AccessBridge {
             return 0;
         int code = keyStroke.getKeyCode();
         switch (code) {
+            case KeyEvent.VK_TAB:
+            case KeyEvent.VK_SPACE:
             case KeyEvent.VK_BACK_SPACE:
             case KeyEvent.VK_DELETE:
             case KeyEvent.VK_DOWN:
@@ -3893,15 +3945,10 @@ public final class AccessBridge {
             debugString("[INFO]:   Shortcut is control character: " + Integer.toHexString(keyCode));
             return (char)keyCode;
         }
-        String keyText = KeyEvent.getKeyText(keyStroke.getKeyCode());
-        debugString("[INFO]:   Shortcut is: " + keyText);
-        if (keyText != null || keyText.length() > 0) {
-            CharSequence seq = keyText.subSequence(0, 1);
-            if (seq != null || seq.length() > 0) {
-                return seq.charAt(0);
-            }
-        }
-        return 0;
+
+        keyCode = keyStroke.getKeyCode();
+        debugString("[INFO]:   Shortcut is: " + Integer.toHexString(keyCode));
+        return (char)keyCode;
     }
 
     /*
@@ -5242,7 +5289,6 @@ public final class AccessBridge {
                         ac = a.getAccessibleContext();
                 }
                 if (ac != null) {
-                    InvocationUtils.registerAccessibleContext(ac, AppContext.getAppContext());
 
                     accessBridge.debugString("[INFO]: AccessibleContext: " + ac);
                     String propertyName = e.getPropertyName();
@@ -5335,11 +5381,9 @@ public final class AccessBridge {
 
                         if (e.getOldValue() instanceof AccessibleContext) {
                             oldAC = (AccessibleContext) e.getOldValue();
-                            InvocationUtils.registerAccessibleContext(oldAC, AppContext.getAppContext());
                         }
                         if (e.getNewValue() instanceof AccessibleContext) {
                             newAC = (AccessibleContext) e.getNewValue();
-                            InvocationUtils.registerAccessibleContext(newAC, AppContext.getAppContext());
                         }
                         accessBridge.debugString("[INFO]:  - about to call propertyChildChange()   old AC: " + oldAC + "new AC: " + newAC);
                         accessBridge.propertyChildChange(e, ac, oldAC, newAC);
@@ -5405,8 +5449,6 @@ public final class AccessBridge {
             prevAC = newAC;
 
             accessBridge.debugString("[INFO]:   - about to call propertyActiveDescendentChange()   AC: " + ac + "   old AC: " + oldAC + "new AC: " + newAC);
-            InvocationUtils.registerAccessibleContext(oldAC, AppContext.getAppContext());
-            InvocationUtils.registerAccessibleContext(newAC, AppContext.getAppContext());
             accessBridge.propertyActiveDescendentChange(e, ac, oldAC, newAC);
         }
 
@@ -5443,14 +5485,12 @@ public final class AccessBridge {
                         // selected. The menu itself is selected.
                         FocusEvent e = new FocusEvent(penult, FocusEvent.FOCUS_GAINED);
                         AccessibleContext context = penult.getAccessibleContext();
-                        InvocationUtils.registerAccessibleContext(context, SunToolkit.targetToAppContext(penult));
                         accessBridge.focusGained(e, context);
                     } else if (penult instanceof JPopupMenu) {
                         // This is a popup with an item selected
                         FocusEvent e =
                         new FocusEvent(last, FocusEvent.FOCUS_GAINED);
                         AccessibleContext focusedAC = last.getAccessibleContext();
-                        InvocationUtils.registerAccessibleContext(focusedAC, SunToolkit.targetToAppContext(last));
                         accessBridge.debugString("[INFO]:  - about to call focusGained()   AC: " + focusedAC);
                         accessBridge.focusGained(e, focusedAC);
                     }
@@ -5461,7 +5501,6 @@ public final class AccessBridge {
                     FocusEvent e = new FocusEvent(focusOwner,
                                                   FocusEvent.FOCUS_GAINED);
                     AccessibleContext focusedAC = focusOwner.getAccessibleContext();
-                    InvocationUtils.registerAccessibleContext(focusedAC, SunToolkit.targetToAppContext(focusOwner));
                     accessBridge.debugString("[INFO]:  - about to call focusGained()   AC: " + focusedAC);
                     accessBridge.focusGained(e, focusedAC);
                 }
@@ -5474,7 +5513,6 @@ public final class AccessBridge {
                 if (a != null) {
                     accessBridge.debugString("[INFO]:  - about to call focusLost()   AC: " + a.getAccessibleContext());
                     AccessibleContext context = a.getAccessibleContext();
-                    InvocationUtils.registerAccessibleContext(context, AppContext.getAppContext());
                     accessBridge.focusLost(e, context);
                 }
             }
@@ -5488,7 +5526,6 @@ public final class AccessBridge {
                 Accessible a = Translator.getAccessible(e.getSource());
                 if (a != null) {
                     AccessibleContext context = a.getAccessibleContext();
-                    InvocationUtils.registerAccessibleContext(context, AppContext.getAppContext());
                     accessBridge.caretUpdate(e, context);
                 }
             }
@@ -5503,7 +5540,6 @@ public final class AccessBridge {
                 Accessible a = Translator.getAccessible(e.getSource());
                 if (a != null) {
                     AccessibleContext context = a.getAccessibleContext();
-                    InvocationUtils.registerAccessibleContext(context, AppContext.getAppContext());
                     accessBridge.mouseClicked(e, context);
                 }
             }
@@ -5514,7 +5550,6 @@ public final class AccessBridge {
                 Accessible a = Translator.getAccessible(e.getSource());
                 if (a != null) {
                     AccessibleContext context = a.getAccessibleContext();
-                    InvocationUtils.registerAccessibleContext(context, AppContext.getAppContext());
                     accessBridge.mouseEntered(e, context);
                 }
             }
@@ -5525,7 +5560,6 @@ public final class AccessBridge {
                 Accessible a = Translator.getAccessible(e.getSource());
                 if (a != null) {
                     AccessibleContext context = a.getAccessibleContext();
-                    InvocationUtils.registerAccessibleContext(context, AppContext.getAppContext());
                     accessBridge.mouseExited(e, context);
                 }
             }
@@ -5536,7 +5570,6 @@ public final class AccessBridge {
                 Accessible a = Translator.getAccessible(e.getSource());
                 if (a != null) {
                     AccessibleContext context = a.getAccessibleContext();
-                    InvocationUtils.registerAccessibleContext(context, AppContext.getAppContext());
                     accessBridge.mousePressed(e, context);
                 }
             }
@@ -5547,7 +5580,6 @@ public final class AccessBridge {
                 Accessible a = Translator.getAccessible(e.getSource());
                 if (a != null) {
                     AccessibleContext context = a.getAccessibleContext();
-                    InvocationUtils.registerAccessibleContext(context, AppContext.getAppContext());
                     accessBridge.mouseReleased(e, context);
                 }
             }
@@ -5561,7 +5593,6 @@ public final class AccessBridge {
                 Accessible a = Translator.getAccessible(e.getSource());
                 if (a != null) {
                     AccessibleContext context = a.getAccessibleContext();
-                    InvocationUtils.registerAccessibleContext(context, AppContext.getAppContext());
                     accessBridge.menuCanceled(e, context);
                 }
             }
@@ -5572,7 +5603,6 @@ public final class AccessBridge {
                 Accessible a = Translator.getAccessible(e.getSource());
                 if (a != null) {
                     AccessibleContext context = a.getAccessibleContext();
-                    InvocationUtils.registerAccessibleContext(context, AppContext.getAppContext());
                     accessBridge.menuDeselected(e, context);
                 }
             }
@@ -5583,7 +5613,6 @@ public final class AccessBridge {
                 Accessible a = Translator.getAccessible(e.getSource());
                 if (a != null) {
                     AccessibleContext context = a.getAccessibleContext();
-                    InvocationUtils.registerAccessibleContext(context, AppContext.getAppContext());
                     accessBridge.menuSelected(e, context);
                 }
             }
@@ -5594,7 +5623,6 @@ public final class AccessBridge {
                 Accessible a = Translator.getAccessible(e.getSource());
                 if (a != null) {
                     AccessibleContext context = a.getAccessibleContext();
-                    InvocationUtils.registerAccessibleContext(context, AppContext.getAppContext());
                     accessBridge.popupMenuCanceled(e, context);
                 }
             }
@@ -5605,7 +5633,6 @@ public final class AccessBridge {
                 Accessible a = Translator.getAccessible(e.getSource());
                 if (a != null) {
                     AccessibleContext context = a.getAccessibleContext();
-                    InvocationUtils.registerAccessibleContext(context, AppContext.getAppContext());
                     accessBridge.popupMenuWillBecomeInvisible(e, context);
                 }
             }
@@ -5616,7 +5643,6 @@ public final class AccessBridge {
                 Accessible a = Translator.getAccessible(e.getSource());
                 if (a != null) {
                     AccessibleContext context = a.getAccessibleContext();
-                    InvocationUtils.registerAccessibleContext(context, AppContext.getAppContext());
                     accessBridge.popupMenuWillBecomeVisible(e, context);
                 }
             }
@@ -6481,7 +6507,7 @@ public final class AccessBridge {
          *
          * @return This component's locale. If this component does not have
          * a locale, the locale of its parent is returned.
-         * @exception IllegalComponentStateException
+         * @throws IllegalComponentStateException
          * If the Component does not have its own locale and has not yet
          * been added to a containment hierarchy such that the locale can be
          * determined from the containing parent.
@@ -7145,7 +7171,7 @@ public final class AccessBridge {
          * object behind the TreeCellRenderer.
          *
          * @param i zero-based index of actions
-         * @return true if the the action was performed; else false.
+         * @return true if the action was performed; else false.
          */
         public boolean doAccessibleAction(int i) {
             if (i < 0 || i >= getAccessibleActionCount()) {
@@ -7177,8 +7203,7 @@ public final class AccessBridge {
     private static class InvocationUtils {
 
         /**
-         * Invokes a {@code Callable} in the {@code AppContext} of the given {@code Accessible}
-         * and waits for it to finish blocking the caller thread.
+         * Invokes a {@code Callable} and waits for it to finish blocking the caller thread.
          *
          * @param callable   the {@code Callable} to invoke
          * @param accessibleTable the {@code AccessibleExtendedTable} which would be used to find the right context
@@ -7196,8 +7221,7 @@ public final class AccessBridge {
         }
 
         /**
-         * Invokes a {@code Callable} in the {@code AppContext} of the given {@code Accessible}
-         * and waits for it to finish blocking the caller thread.
+         * Invokes a {@code Callable} and waits for it to finish blocking the caller thread.
          *
          * @param callable   the {@code Callable} to invoke
          * @param accessible the {@code Accessible} which would be used to find the right context
@@ -7219,8 +7243,7 @@ public final class AccessBridge {
         }
 
         /**
-         * Invokes a {@code Callable} in the {@code AppContext} of the given {@code Component}
-         * and waits for it to finish blocking the caller thread.
+         * Invokes a {@code Callable} and waits for it to finish blocking the caller thread.
          *
          * @param callable  the {@code Callable} to invoke
          * @param component the {@code Component} which would be used to find the right context
@@ -7231,12 +7254,11 @@ public final class AccessBridge {
          */
         public static <T> T invokeAndWait(final Callable<T> callable,
                                           final Component component) {
-            return invokeAndWait(callable, SunToolkit.targetToAppContext(component));
+            return invokeAndWait(callable);
         }
 
         /**
-         * Invokes a {@code Callable} in the {@code AppContext} mapped to the given {@code AccessibleContext}
-         * and waits for it to finish blocking the caller thread.
+         * Invokes a {@code Callable} and waits for it to finish blocking the caller thread.
          *
          * @param callable the {@code Callable} to invoke
          * @param accessibleContext the {@code AccessibleContext} which would be used to determine the right
@@ -7247,45 +7269,26 @@ public final class AccessBridge {
          */
         public static <T> T invokeAndWait(final Callable<T> callable,
                                           final AccessibleContext accessibleContext) {
-            AppContext targetContext = AWTAccessor.getAccessibleContextAccessor()
-                    .getAppContext(accessibleContext);
-            if (targetContext != null) {
-                return invokeAndWait(callable, targetContext);
-            } else {
-                // Normally this should not happen, unmapped context provided and
-                // the target AppContext is unknown.
-
-                // Try to recover in case the context is a translator.
-                if (accessibleContext instanceof Translator) {
-                    Object source = ((Translator)accessibleContext).getSource();
-                    if (source instanceof Component) {
-                        return invokeAndWait(callable, (Component)source);
-                    }
-                }
-            }
-            throw new RuntimeException("Unmapped AccessibleContext used to dispatch event: " + accessibleContext);
+            return invokeAndWait(callable);
         }
 
-        private static <T> T invokeAndWait(final Callable<T> callable,
-                                           final AppContext targetAppContext) {
+        private static <T> T invokeAndWait(final Callable<T> callable) {
             final CallableWrapper<T> wrapper = new CallableWrapper<T>(callable);
             try {
-                invokeAndWait(wrapper, targetAppContext);
+                invokeAndWait(wrapper);
                 T result = wrapper.getResult();
-                updateAppContextMap(result, targetAppContext);
                 return result;
             } catch (final Exception e) {
                 throw new RuntimeException(e);
             }
         }
 
-        private static void invokeAndWait(final Runnable runnable,
-                                        final AppContext appContext)
+        private static void invokeAndWait(final Runnable runnable)
                 throws InterruptedException, InvocationTargetException {
 
-            EventQueue eq = SunToolkit.getSystemEventQueueImplPP(appContext);
             Object lock = new Object();
             Toolkit source = Toolkit.getDefaultToolkit();
+            EventQueue eq = source.getSystemEventQueue();
             InvocationEvent event =
                     new InvocationEvent(source, runnable, lock, true);
             synchronized (lock) {
@@ -7296,26 +7299,6 @@ public final class AccessBridge {
             Throwable eventThrowable = event.getThrowable();
             if (eventThrowable != null) {
                 throw new InvocationTargetException(eventThrowable);
-            }
-        }
-
-        /**
-         * Maps the {@code AccessibleContext} to the {@code AppContext} which should be used
-         * to dispatch events related to the {@code AccessibleContext}
-         * @param accessibleContext the {@code AccessibleContext} for the mapping
-         * @param targetContext the {@code AppContext} for the mapping
-         */
-        public static void registerAccessibleContext(final AccessibleContext accessibleContext,
-                                                     final AppContext targetContext) {
-            if (accessibleContext != null) {
-                AWTAccessor.getAccessibleContextAccessor().setAppContext(accessibleContext, targetContext);
-            }
-        }
-
-        private static <T> void updateAppContextMap(final T accessibleContext,
-                                                    final AppContext targetContext) {
-            if (accessibleContext instanceof AccessibleContext) {
-                registerAccessibleContext((AccessibleContext)accessibleContext, targetContext);
             }
         }
 
@@ -7350,7 +7333,7 @@ public final class AccessBridge {
      * A helper class to handle coordinate conversion between screen and user spaces.
      * See {@link sun.java2d.SunGraphicsEnvironment}
      */
-    private static abstract class AccessibilityGraphicsEnvironment extends GraphicsEnvironment {
+    private abstract static class AccessibilityGraphicsEnvironment extends GraphicsEnvironment {
         /**
          * Returns the graphics configuration which bounds contain the given point in the user's space.
          *
